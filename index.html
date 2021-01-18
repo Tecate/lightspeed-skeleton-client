@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>fucking work please</title>
+	<script type="text/javascript">
+         function onload() {
+         };
+	</script>
+</head>
+<body onload="onload();">
+<video id="video" width="320" height="240" playsinline autoplay controls></video>
+
+<script type="text/javascript">
+	var socket = new WebSocket("ws://zx.ht:8080/websocket");
+	var pc = new RTCPeerConnection();
+
+  // Offer to receive 1 audio, and 1 video tracks
+  pc.addTransceiver("audio", { direction: "recvonly" });
+  // pc.addTransceiver('video', { 'direction': 'recvonly' })
+  pc.addTransceiver("video", { direction: "recvonly" });
+
+  pc.ontrack = (event) => {
+    const {
+      track: { kind },
+      streams,
+    } = event;
+
+    if (kind === "video") {
+    	console.log("kind == video");
+    	// console.log(streams[0]);
+		var video = document.getElementById('video');
+		video.srcObject = streams[0];
+    }
+  };
+
+  pc.onicecandidate = (e) => {
+    const { candidate } = e;
+    if (candidate) {
+      console.log("Candidate success");
+      socket.send(
+        JSON.stringify({
+          event: "candidate",
+          data: JSON.stringify(e.candidate),
+        })
+      );
+    }
+  };
+
+
+	// log everything
+	// socket.onmessage = function (event) {
+	//   console.log(event.data);
+	// }
+	
+	socket.onopen = () => {
+      console.log("Connected to websocket");
+    };
+
+    socket.onerror = () => {
+      console.error(`Socket encountered error. Closing socket.`);
+      socket.close();
+    };
+
+ if (socket) {
+    socket.onmessage = async (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (!msg) {
+        console.log("Failed to parse msg");
+        return;
+      }
+
+      const offerCandidate = JSON.parse(msg.data);
+
+      if (!offerCandidate) {
+        console.log("Failed to parse offer msg data");
+        return;
+      }
+
+      switch (msg.event) {
+        case "offer":
+          console.log("Offer");
+          pc.setRemoteDescription(offerCandidate);
+
+          try {
+            const answer = await pc.createAnswer();
+            pc.setLocalDescription(answer);
+            socket.send(
+              JSON.stringify({
+                event: "answer",
+                data: JSON.stringify(answer),
+              })
+            );
+          } catch (e) {
+            console.error(e.message);
+          }
+
+          return;
+        case "candidate":
+          console.log("Candidate");
+          pc.addIceCandidate(offerCandidate);
+          return;
+        case "info":
+        console.log("viewers: " + JSON.parse(msg.data).no_connections)
+      }
+    };
+  }
+
+</script>
+</body>
+</html>
